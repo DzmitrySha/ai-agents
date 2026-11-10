@@ -1,0 +1,22 @@
+# Cilium Gateway HTTPRoute (prod FQDN без -dev) — трафик идёт во frontend (nginx),
+# дальше /api, /v1, /auth, /health проксируются в ai-agents-backend:8080.
+# Lab/work Compose: ai-agents-dev… (docker/.env + Traefik labels) — не путать.
+# При форке: сменить hostname и при необходимости parentRef Gateway.
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: frontend-https
+spec:
+  parentRefs:
+    - name: cilium-gateway
+      namespace: kube-system
+  hostnames:
+    - ai-agents.example.com
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /
+      backendRefs:
+        - name: ai-agents-frontend
+          port: 80

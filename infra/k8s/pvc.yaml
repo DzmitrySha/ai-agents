@@ -1,0 +1,14 @@
+# Данные приложения (local-path provisioner на prod).
+# RWO → replicas: 1 и strategy Recreate у backend (см. backend.yaml).
+# Compose-паритет: volume ./storage → /data (STORAGE_PATH).
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: ai-agents-data
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: local-path
+  resources:
+    requests:
+      storage: 10Gi

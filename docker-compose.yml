@@ -1,0 +1,162 @@
+# ai-agents — control plane (FastAPI + LangGraph) + SPA (React + Mantine).
+#
+# FQDN: lab/work Traefik = ai-agents-dev…  ·  prod k8s = ai-agents… (без -dev)
+#
+# PostgreSQL — НА ХОСТЕ, не в Compose: сервиса postgres здесь нет.
+#   DATABASE_URL (docker/.env.secrets) → host.docker.internal:5432/ai_agents.
+#   DDL — только ai-agents-migrate (alembic upgrade head, restart "no");
+#   он же создаёт базу, если её нет. Backend ждёт его завершения.
+#
+# Prerequisites (lab/work on Windows):
+#   1. docker network create traefik_proxy   # once
+#   2. cd ../traefik && docker compose up -d
+#   3. Keycloak: local (lab/home) or auth-test via Traefik (work)
+#   4. hosts: 127.0.0.1  ai-agents-dev.example.com
+#
+# Work / lab (corp IdP auth-test, default .env.example):
+#   cp docker/.env.example docker/.env
+#   cp docker/.env.secrets.example docker/.env.secrets
+#   docker compose --env-file docker/.env --env-file docker/.env.secrets up -d --build
+#
+# Lab / home (local keycloak-dev, БД всё равно host-Postgres):
+#   cp docker/.env.lab.example docker/.env
+#   docker compose -f docker-compose.yml -f docker-compose.lab.yml \
+#     --env-file docker/.env --env-file docker/.env.secrets up -d --build
+#
+# Offline via ai-agents/offline-cli:
+#   offline-docker up-offline -p .           # work/corp stack
+#   offline-docker up-offline -p . --lab     # + docker-compose.lab.yml
+#
+# Traefik бьёт во frontend (nginx): SPA + reverse-proxy /api, /v1, /auth, /health → backend.
+# Хостовые порты: ${BACKEND_PUBLISH_PORT:-8096} → backend:8080, ${FRONTEND_PUBLISH_PORT:-4196} → frontend:80.
+# Внутри docker-сети порты фиксированы (8080/80): healthcheck, nginx upstream, Prometheus и т.п.
+# BACKEND_PORT в контейнере НЕ задаётся — Dockerfile CMD слушает 8080.
+
+name: ai-agents
+
+networks:
+  default:
+    name: ai-agents_default
+  traefik_proxy:
+    external: true
+    name: traefik_proxy
+
+services:
+  ai-agents-migrate:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    image: ${AI_AGENTS_BACKEND_IMAGE:-ai-agents-backend:local}
+    restart: "no"
+    env_file:
+      - path: docker/.env
+        required: false
+      - path: docker/.env.secrets
+        required: false
+    environment:
+      DATABASE_URL: ${DATABASE_URL}
+    command: ["alembic", "-c", "alembic.ini", "upgrade", "head"]
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    networks:
+      - default
+
+  ai-agents-backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    image: ${AI_AGENTS_BACKEND_IMAGE:-ai-agents-backend:local}
+    container_name: ai-agents-backend
+    restart: unless-stopped
+    depends_on:
+      ai-agents-migrate:
+        condition: service_completed_successfully
+    env_file:
+      - path: docker/.env
+        required: false
+      - path: docker/.env.secrets
+        required: false
+    environment:
+      DATABASE_URL: ${DATABASE_URL}
+      APP_NAME: ${APP_NAME:-ai-agents}
+      ENVIRONMENT: ${ENVIRONMENT:-development}
+      PUBLIC_URL: ${PUBLIC_URL:-https://ai-agents-dev.example.com}
+      SERVICE_API_KEYS: ${SERVICE_API_KEYS:-}
+      DEFAULT_LLM_BASE_URL: ${DEFAULT_LLM_BASE_URL:-http://host.docker.internal:1234/v1}
+      DEFAULT_LLM_MODEL: ${DEFAULT_LLM_MODEL:-local-model}
+      DEFAULT_LLM_API_KEY: ${DEFAULT_LLM_API_KEY:-not-needed}
+      RUN_TIMEOUT_SECONDS: ${RUN_TIMEOUT_SECONDS:-120}
+      MAX_STEPS: ${MAX_STEPS:-8}
+      MAX_STEPS_CAP: ${MAX_STEPS_CAP:-32}
+      RUN_TIMEOUT_CAP_SECONDS: ${RUN_TIMEOUT_CAP_SECONDS:-600}
+      # Private MCP endpoints allowed outbound (hosts / *.suffix / CIDR; MCP only).
+      MCP_EGRESS_ALLOWED_HOSTS: ${MCP_EGRESS_ALLOWED_HOSTS:-}
+      # Keycloak OIDC (BFF cookie). KEYCLOAK_CLIENT_SECRET — только docker/.env.secrets.
+      KEYCLOAK_ISSUER: ${KEYCLOAK_ISSUER:-https://keycloak.example.com/realms/ai-agents}
+      KEYCLOAK_REALM: ${KEYCLOAK_REALM:-ai-agents}
+      KEYCLOAK_CLIENT_ID: ${KEYCLOAK_CLIENT_ID:-ai-agents}
+      KEYCLOAK_REDIRECT_URI: ${KEYCLOAK_REDIRECT_URI:-https://ai-agents-dev.example.com/auth/callback}
+      KEYCLOAK_PUBLIC_URL: ${KEYCLOAK_PUBLIC_URL:-https://keycloak.example.com}
+      KEYCLOAK_CA_BUNDLE: ${KEYCLOAK_CA_BUNDLE:-}
+      KEYCLOAK_SSL_VERIFY: ${KEYCLOAK_SSL_VERIFY:-false}
+      ADMIN_ROLES: ${ADMIN_ROLES:-ai-agents-admin}
+      SESSION_SECRET_KEY: ${SESSION_SECRET_KEY:-dev-only-change-me}
+      SESSION_COOKIE_NAME: ${SESSION_COOKIE_NAME:-ai_agents_session}
+      SESSION_COOKIE_SECURE: ${SESSION_COOKIE_SECURE:-true}
+      SESSION_TTL_HOURS: ${SESSION_TTL_HOURS:-8}
+      LANGFUSE_HOST: ${LANGFUSE_HOST:-}
+      LANGFUSE_PUBLIC_KEY: ${LANGFUSE_PUBLIC_KEY:-}
+      LANGFUSE_SECRET_KEY: ${LANGFUSE_SECRET_KEY:-}
+      # Optional integrations: GitHub rate limit / skills.sh official API.
+      GITHUB_TOKEN: ${GITHUB_TOKEN:-}
+      SKILLS_SH_TOKEN: ${SKILLS_SH_TOKEN:-}
+      STORAGE_PATH: ${STORAGE_PATH:-/data}
+      LOG_DIR: ${LOG_DIR:-/data/logs}
+    volumes:
+      - ./storage:/data
+    ports:
+      - "${BACKEND_PUBLISH_PORT:-8096}:8080"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/health')",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 6
+      start_period: 20s
+    networks:
+      - default
+      - traefik_proxy
+
+  ai-agents-frontend:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+    image: ${AI_AGENTS_FRONTEND_IMAGE:-ai-agents-frontend:local}
+    container_name: ai-agents-frontend
+    restart: unless-stopped
+    depends_on:
+      ai-agents-backend:
+        condition: service_healthy
+    environment:
+      # Docker DNS резолвит короткое имя; в k8s — FQDN (infra/k8s/frontend.yaml).
+      BACKEND_UPSTREAM: ${BACKEND_UPSTREAM:-ai-agents-backend:8080}
+    ports:
+      - "${FRONTEND_PUBLISH_PORT:-4196}:80"
+    networks:
+      - default
+      - traefik_proxy
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=traefik_proxy
+      # lab/work: ai-agents-dev…  ·  prod k8s: ai-agents… (HTTPRoute, без -dev)
+      - traefik.http.routers.ai-agents-dev.rule=Host(`ai-agents-dev.example.com`)
+      - traefik.http.routers.ai-agents-dev.entrypoints=websecure
+      - traefik.http.routers.ai-agents-dev.tls=true
+      - traefik.http.services.ai-agents-dev.loadbalancer.server.port=80

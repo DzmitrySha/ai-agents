@@ -1,0 +1,63 @@
+# SPA (React + Mantine) + nginx reverse-proxy /api, /v1, /auth, /health → ai-agents-backend:8080.
+# Deployment + Service. Образ — registry, pull secret registry-pull.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: frontend
+  labels:
+    app: frontend
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: frontend
+  template:
+    metadata:
+      labels:
+        app: frontend
+    spec:
+      imagePullSecrets:
+        - name: registry-pull
+      containers:
+        - name: frontend
+          image: registry.example.com/ai-agents/frontend:placeholder
+          imagePullPolicy: IfNotPresent
+          env:
+            # nginx resolver не использует search-домены: короткое имя не резолвится.
+            - name: BACKEND_UPSTREAM
+              value: "ai-agents-backend.ai-agents.svc.cluster.local:8080"
+          ports:
+            - name: http
+              containerPort: 80
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 3
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 30
+          resources:
+            requests:
+              cpu: 50m
+              memory: 256Mi
+            limits:
+              cpu: "1"
+              memory: 1Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  # Prefixed name matches nginx upstream in frontend image (Compose + k8s).
+  name: ai-agents-frontend
+spec:
+  selector:
+    app: frontend
+  ports:
+    - name: http
+      port: 80
+      targetPort: http

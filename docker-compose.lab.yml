@@ -1,0 +1,38 @@
+# Lab / home override: локальный Keycloak + LLM (LM Studio) на Docker-хосте.
+#
+#   docker compose -f docker-compose.yml -f docker-compose.lab.yml \
+#     --env-file docker/.env --env-file docker/.env.secrets up -d --build
+#
+# Offline:
+#   offline-docker up-offline -p . --lab
+#
+# hosts (Windows):
+#   127.0.0.1  ai-agents-dev.example.com
+#   127.0.0.1  keycloak.example.com
+#
+# PostgreSQL — на хосте (host.docker.internal:5432/ai_agents), сервиса postgres нет;
+# ai-agents-migrate идёт туда же по DATABASE_URL из docker/.env.secrets.
+#
+# Keycloak в этом файле НЕ поднимается: OIDC уходит в локально развёрнутый
+# keycloak-dev (realm ai-agents, TLS на хосте :8443, публичный HTTPS —
+# file-router keycloak.example.com в общем Traefik). Без extra_hosts контейнер
+# резолвил бы keycloak.example.com через обычный DNS, а не в локальный сервис.
+#
+# Клиент ai-agents (confidential) + redirect URI
+# https://ai-agents-dev.example.com/auth/callback должны быть созданы
+# в локальном realm ai-agents; KEYCLOAK_CLIENT_SECRET — только в docker/.env.secrets.
+#
+# На рабочем ПК с корпоративным IdP/LLM endpoint этот файл НЕ подключать.
+
+services:
+  ai-agents-backend:
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+      # Локальный IdP: ${KEYCLOAK_HOST} → host-gateway → Traefik (lab-hosts) → KC:8443
+      - "${KEYCLOAK_HOST:-keycloak.example.com}:host-gateway"
+    environment:
+      KEYCLOAK_ISSUER: ${KEYCLOAK_ISSUER:-https://keycloak.example.com/realms/ai-agents}
+      KEYCLOAK_PUBLIC_URL: ${KEYCLOAK_PUBLIC_URL:-https://keycloak.example.com}
+      # Самоподписанные/mkcert сертификаты lab-certs.
+      KEYCLOAK_SSL_VERIFY: ${KEYCLOAK_SSL_VERIFY:-false}
+      KEYCLOAK_CA_BUNDLE: ${KEYCLOAK_CA_BUNDLE:-}

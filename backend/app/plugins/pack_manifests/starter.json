@@ -1,0 +1,17 @@
+{
+  "name": "starter",
+  "version": "1",
+  "description": "Готовый preset-агент с калькулятором: пример кодового пакета без внешних зависимостей.",
+  "tools": ["calculator"],
+  "skills": [],
+  "agents": [
+    {
+      "slug": "starter-assistant",
+      "name": "Starter assistant",
+      "description": "Считает и отвечает на простые вопросы.",
+      "system_prompt": "Ты краткий ассистент. Для арифметики используй tool calculator.",
+      "tools": ["calculator"],
+      "skills": []
+    }
+  ]
+}

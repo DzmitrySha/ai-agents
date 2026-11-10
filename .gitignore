@@ -1,0 +1,61 @@
+# Secrets / local env
+docker/.env
+docker/.env.secrets
+.env
+.env.*
+!.env.example
+!**/.env.example
+!**/.env.secrets.example
+!**/.env.lab.example
+!docker/.env.lab.example
+# plaintext k8s Secret drafts (в git только *.enc.yaml + *.example.yaml)
+infra/k8s/*-secret.yaml
+!infra/k8s/*-secret.example.yaml
+
+# Python
+backend/.venv/
+backend/**/__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.cache/
+
+# Node
+frontend/node_modules/
+frontend/dist/
+
+# Offline / local
+offline-cache/
+*.log
+.DS_Store
+Thumbs.db
+
+# IDE
+.idea/
+.vscode/
+*.swp
+
+# App data (Compose bind ./storage; keep .gitkeep)
+storage/**
+!storage/.gitkeep
+
+# DB dumps (перенос данных, не в git)
+ai-agents-db-*.sql
+ai-agents-db-*.dump
+backups/*.sql
+backups/*.dump
+backups/*.log
+backups/backup.env.cmd
+
+# Логи backend (app_*.log / zip)
+backend/logs/
+
+# Локальные планы Cursor
+.cursor/plans/
+
+# Локальная инструкция по двухрепозиторной работе (корпоративные данные)
+docs/TWO-REPO-WORKFLOW.local.md
+
+# Архивы рабочей копии репозитория
+/ai-agents.part*.rar

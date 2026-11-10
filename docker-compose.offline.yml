@@ -1,0 +1,7 @@
+services:
+  ai-agents-migrate:
+    pull_policy: never
+  ai-agents-backend:
+    pull_policy: never
+  ai-agents-frontend:
+    pull_policy: never

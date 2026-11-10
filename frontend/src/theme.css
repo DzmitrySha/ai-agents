@@ -1,0 +1,49 @@
+/* Portracker-подобная тёмная тема: только отличия от штатной тёмной Mantine. */
+
+html[data-theme="portracker"] {
+  color-scheme: dark;
+}
+
+html[data-theme="portracker"] body {
+  background-color: #0d1422;
+}
+
+html[data-theme="portracker"] .mantine-AppShell-header {
+  background-color: #0d1422;
+  border-bottom: 1px solid #1e2940;
+}
+
+html[data-theme="portracker"] .mantine-AppShell-navbar {
+  background-color: #0d1422;
+  border-right: 1px solid #1e2940;
+}
+
+html[data-theme="portracker"] .mantine-AppShell-main {
+  background-color: #0d1422;
+}
+
+html[data-theme="portracker"] .mantine-NavLink-root[data-active] {
+  background-color: #1b2742;
+  color: #e2e7ff;
+}
+
+html[data-theme="portracker"] .mantine-NavLink-root[data-active]:hover {
+  background-color: #223052;
+}
+
+html[data-theme="portracker"] .mantine-Table-th {
+  color: #8b96b1;
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+html[data-theme="portracker"] .mantine-Card-root,
+html[data-theme="portracker"] .mantine-Paper-root {
+  border-color: #22304a;
+}
+
+/* Кликабельный блок пользователя в подвале навбара (открывает меню). */
+.user-menu:hover {
+  background-color: var(--mantine-color-default-hover);
+}

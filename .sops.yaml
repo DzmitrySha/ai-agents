@@ -1,0 +1,17 @@
+# SOPS: шифрует только data/stringData в Secret-манифестах под infra/k8s/
+# Public age key (private: ~/.config/sops/age/keys.txt и Secret argocd/sops-age)
+# Общий recipient кластера prod (argocd/sops-age).
+# [/\\] — матч и Unix (/), и Windows absolute paths (\).
+creation_rules:
+  - path_regex: .*[/\\]infra[/\\]k8s[/\\].*secret.*\.ya?ml$
+    encrypted_regex: "^(data|stringData)$"
+    age: age17g5m7ssvlccr5gcdh699l83sg52dwj72ttckaz36wnu762eyvs8q9csj0h
+  - path_regex: .*[/\\]infra[/\\]k8s[/\\].*\.enc\.ya?ml$
+    encrypted_regex: "^(data|stringData)$"
+    age: age17g5m7ssvlccr5gcdh699l83sg52dwj72ttckaz36wnu762eyvs8q9csj0h
+  - path_regex: infra[/\\]k8s[/\\].*secret.*\.ya?ml$
+    encrypted_regex: "^(data|stringData)$"
+    age: age17g5m7ssvlccr5gcdh699l83sg52dwj72ttckaz36wnu762eyvs8q9csj0h
+  - path_regex: infra[/\\]k8s[/\\].*\.enc\.ya?ml$
+    encrypted_regex: "^(data|stringData)$"
+    age: age17g5m7ssvlccr5gcdh699l83sg52dwj72ttckaz36wnu762eyvs8q9csj0h

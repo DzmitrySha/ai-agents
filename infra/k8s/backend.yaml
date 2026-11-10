@@ -1,0 +1,140 @@
+# ConfigMap (plaintext, git) + Deployment + Service — backend (API) + initContainer миграций.
+# Secret — SOPS enc через KSOPS (secret-generator.yaml). Слои: ENV_LAYERS.md.
+# PVC ai-agents-data → /data (STORAGE_PATH).
+# PostgreSQL — внешний, на neuro-host (Secret DATABASE_URL); в кластере не поднимается.
+# SPA отдаёт frontend.yaml; HTTPRoute бьёт во ai-agents-frontend:80.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ai-agents-config
+data:
+  APP_NAME: "ai-agents"
+  ENVIRONMENT: "production"
+  BACKEND_PORT: "8080"
+  PROJECT_HOST: "ai-agents.example.com"
+  PUBLIC_URL: "https://ai-agents.example.com"
+  # prod IdP: keycloak.example.com (см. docs/LAB-WORK.md)
+  KEYCLOAK_ISSUER: "https://keycloak.example.com/realms/ai-agents"
+  KEYCLOAK_PUBLIC_URL: "https://keycloak.example.com"
+  KEYCLOAK_REALM: "ai-agents"
+  KEYCLOAK_CLIENT_ID: "ai-agents"
+  KEYCLOAK_REDIRECT_URI: "https://ai-agents.example.com/auth/callback"
+  # Shared corp CA on node: /opt/ai-agents/certs → /certs (см. docs/DEPLOY-STANDARD.md § Auth)
+  KEYCLOAK_CA_BUNDLE: "/certs/ca.crt"
+  # Temporary: httpx+CA may fail; false must win over CA_BUNDLE (settings.keycloak_ssl_context).
+  KEYCLOAK_SSL_VERIFY: "false"
+  ADMIN_ROLES: "ai-agents-admin"
+  SESSION_COOKIE_NAME: "ai_agents_session"
+  SESSION_COOKIE_SECURE: "true"
+  SESSION_TTL_HOURS: "8"
+  LANGFUSE_HOST: "http://langfuse.ai-agents.svc.cluster.local:3000"
+  MAX_STEPS_CAP: "32"
+  RUN_TIMEOUT_CAP_SECONDS: "600"
+  # Default OpenAI-compatible LLM; clients may override per run.
+  DEFAULT_LLM_BASE_URL: "http://lm-studio.ai-agents.svc.cluster.local:1234/v1"
+  DEFAULT_LLM_MODEL: "local-model"
+  RUN_TIMEOUT_SECONDS: "120"
+  MAX_STEPS: "8"
+  SUPERADMIN_EMAILS: "admin@example.com"
+  USER_DAILY_RUN_LIMIT: "20"
+  # PVC mountPath; Compose: ./storage
+  STORAGE_PATH: "/data"
+  LOG_DIR: "/data/logs"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: backend
+  labels:
+    app: backend
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: backend
+  template:
+    metadata:
+      labels:
+        app: backend
+    spec:
+      imagePullSecrets:
+        - name: registry-pull
+      initContainers:
+        - name: migrate-db
+          image: registry.example.com/ai-agents/backend:placeholder
+          imagePullPolicy: IfNotPresent
+          command: ["alembic", "-c", "alembic.ini", "upgrade", "head"]
+          envFrom:
+            - configMapRef:
+                name: ai-agents-config
+            - secretRef:
+                name: ai-agents-secret
+          resources:
+            requests:
+              cpu: 50m
+              memory: 128Mi
+            limits:
+              cpu: "1"
+              memory: 512Mi
+      containers:
+        - name: backend
+          image: registry.example.com/ai-agents/backend:placeholder
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8080
+          envFrom:
+            - configMapRef:
+                name: ai-agents-config
+            - secretRef:
+                name: ai-agents-secret
+          volumeMounts:
+            - name: data
+              mountPath: /data
+            - name: ca
+              mountPath: /certs
+              readOnly: true
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            failureThreshold: 6
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 30
+            periodSeconds: 30
+          resources:
+            requests:
+              cpu: 50m
+              memory: 256Mi
+            limits:
+              cpu: "1"
+              memory: 1Gi
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: ai-agents-data
+        # Shared GPO CA for all ai-agents apps on prod (ops: /opt/ai-agents/certs/ca.crt).
+        - name: ca
+          hostPath:
+            path: /opt/ai-agents/certs
+            type: Directory
+---
+apiVersion: v1
+kind: Service
+metadata:
+  # Prefixed name matches nginx upstream in frontend image (Compose + k8s).
+  name: ai-agents-backend
+spec:
+  selector:
+    app: backend
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http
